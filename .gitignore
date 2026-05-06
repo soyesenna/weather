@@ -1,0 +1,55 @@
+# 환경변수 — 절대 commit 금지
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel/
+
+# 빌드 산출물
+dist/
+build/
+
+# 테스트·커버리지
+coverage/
+.nyc_output/
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*~
+
+# 로컬 데이터·시드 산출물 (정적 GeoJSON 변환 결과 등은 커밋, 임시 다운로드는 무시)
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+/tmp/
+/scratch/
+
+# Drizzle / 마이그레이션 임시
+drizzle/.migrations.lock
+
+# 로그
+*.log
+logs/

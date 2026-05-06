@@ -1,0 +1,11 @@
+{
+  "active": true,
+  "started_at": "2026-05-06T10:50:13.290Z",
+  "current_phase": "ralplan",
+  "original_prompt": "/oh-my-claudecode:ralplan 계속 작업해",
+  "session_id": "d4214d8d-988f-4515-bbc7-2f1a708e2814",
+  "project_path": "/Users/soyesenna/Desktop/workspace/weather",
+  "awaiting_confirmation": true,
+  "awaiting_confirmation_set_at": "2026-05-06T10:50:13.290Z",
+  "last_checked_at": "2026-05-06T10:50:13.290Z"
+}
