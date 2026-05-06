@@ -137,4 +137,6 @@ openssl rand -hex 32  # IP_SALT
 
 ## 시연 GIF/영상
 
-`docs/demo-assets/seoul-flood-demo.gif` 또는 Vercel preview 녹화본을 README에 추가하면 됩니다. 현재 저장소에는 구현 산출물과 다이어그램이 포함되어 있고, 실제 녹화 파일은 배포 URL 확정 후 생성합니다.
+![서울 도시침수 대응 데모 시연](docs/demo-assets/seoul-flood-demo.gif)
+
+위 GIF는 시민 요약, 지도 레이어, 안전경로, 익명 제보, 운영자 콘솔의 30초 시연 흐름을 담은 로컬 생성 자산입니다. 배포 URL 확정 후 실제 브라우저 녹화본으로 교체할 수 있습니다.
