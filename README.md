@@ -4,11 +4,11 @@ Next.js fullstack 단일 코드베이스로 만든 서울 25개 자치구 대상
 
 ## 핵심 기능
 
-- 시민 화면: 서울 전역 위험 셀, 레이어 토글, 현재 위치 행동 카드, 가까운 대피소, 익명 제보
+- 시민 화면: Kakao Map 기반 서울 전역 위험 셀, 레이어 토글, 현재 위치 행동 카드, 가까운 대피소, 사진 포함 익명 제보
 - 안전경로: 출발/도착 기준 경로가 HIGH 셀을 지나는지 검사하고 경고 및 우회 후보 표시
 - 운영자 콘솔: `/admin` 비밀번호 인증, Top 20 위험 셀, 최근 제보 50건, API 수집 헬스 표
 - 수집: GitHub Actions 5분 cron → `/api/ingest/all`, Vercel Cron 일일 cleanup → `/api/cron/cleanup`
-- DB: Supabase PostgreSQL + PostGIS, Storage는 private bucket + signed URL 7일 정책을 전제로 설계
+- DB: Supabase PostgreSQL + PostGIS, Storage private bucket 사진 업로드 + signed URL 7일
 - fallback: DB/API 미연결 로컬에서도 데모 데이터로 화면·API·테스트가 동작
 
 ## 시스템 다이어그램
@@ -79,6 +79,14 @@ pnpm db:schema
 pnpm seed:demo
 pnpm dev
 ```
+
+## 주요 API
+
+- `GET /api/risk/cells?bbox=minLng,minLat,maxLng,maxLat&zoom=14`: 위험 셀. bbox > 50km² 또는 zoom < 14이면 `X-Auto-Aggregated: true`로 자치구 집계 반환
+- `GET /api/static/layers`: 침수예상도, 대피소, 빗물펌프장, 하천 수위계, 도로 통제 정적 레이어
+- `POST /api/reports`: JSON 또는 multipart/form-data 제보. `Content-Length > 1.5MB`는 413, 사진은 private Storage에 업로드 후 7일 signed URL 저장
+- `POST /api/route`: HIGH 셀 통과 경고 및 fallback 직선/haversine 경로
+- `POST /api/ingest/all`: `X-Ingest-Token` 보호, 외부 API health와 `external_snapshots` 저장 후 위험 셀 upsert
 
 ## 검증 명령
 

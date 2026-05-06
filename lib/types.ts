@@ -60,6 +60,22 @@ export type CitizenReport = {
   createdAt: string;
 };
 
+export type FloodPolygon = {
+  id: string;
+  name: string;
+  gu: string;
+  coordinates: Array<{ lat: number; lng: number }>;
+};
+
+export type RoadIncident = {
+  id: string;
+  title: string;
+  gu: string;
+  lat: number;
+  lng: number;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+};
+
 export type ApiHealth = {
   provider: string;
   status: 'ok' | 'degraded' | 'error';

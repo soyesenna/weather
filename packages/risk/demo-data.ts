@@ -1,6 +1,6 @@
 import { GU_CENTERS } from '@/lib/geo';
 import { isoNow, minutesAgo } from '@/lib/time';
-import type { ApiHealth, CitizenReport, PumpStation, RiverGauge, RiskCell, RiskInputs, Shelter } from '@/lib/types';
+import type { ApiHealth, CitizenReport, FloodPolygon, PumpStation, RiverGauge, RiskCell, RiskInputs, RoadIncident, Shelter } from '@/lib/types';
 import { classifyRisk, computeRiskScore } from './scoring';
 
 function pseudo(seed: number) {
@@ -78,6 +78,28 @@ export const demoReports: CitizenReport[] = [
   { id: 'report-2', gu: '영등포구', lat: 37.525, lng: 126.898, depthStep: 'ankle', mobilityBlock: ['유모차', '휠체어'], memo: '보도 쪽 물고임', createdAt: minutesAgo(19) },
   { id: 'report-3', gu: '송파구', lat: 37.513, lng: 127.103, depthStep: 'thigh', mobilityBlock: ['차량'], memo: '지하차도 입구 통제 필요', createdAt: minutesAgo(31) },
 ];
+
+
+export const demoFloodPolygons: FloodPolygon[] = GU_CENTERS.filter((_, i) => i % 4 === 0).map(([gu, lat, lng], i) => ({
+  id: `flood-${i + 1}`,
+  name: `${gu} 침수예상 구역`,
+  gu,
+  coordinates: [
+    { lat: lat - 0.006, lng: lng - 0.006 },
+    { lat: lat - 0.004, lng: lng + 0.007 },
+    { lat: lat + 0.006, lng: lng + 0.005 },
+    { lat: lat + 0.005, lng: lng - 0.007 },
+  ],
+}));
+
+export const demoRoadIncidents: RoadIncident[] = GU_CENTERS.filter((_, i) => i % 5 === 0).map(([gu, lat, lng], i) => ({
+  id: `road-${i + 1}`,
+  title: `${gu} 도로 통제 후보`,
+  gu,
+  lat: lat + 0.002,
+  lng: lng + 0.006,
+  severity: i % 2 === 0 ? 'HIGH' : 'MEDIUM',
+}));
 
 export function demoHealth(): ApiHealth[] {
   return [

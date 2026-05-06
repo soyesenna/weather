@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from 'crypto';
+import type { JSONValue } from 'postgres';
 import { getSql } from './db';
 import { nearestGu } from './geo';
 import type { ApiHealth, CitizenReport, RiskCell } from './types';
@@ -87,9 +88,9 @@ export async function getReports(limit = 50): Promise<CitizenReport[]> {
   }
 }
 
-export async function createReport(input: Omit<CitizenReport, 'id' | 'gu' | 'createdAt'>, ipHash: string) {
+export async function createReport(input: Omit<CitizenReport, 'id' | 'gu' | 'createdAt'>, ipHash: string, id = randomUUID()) {
   const gu = nearestGu(input.lat, input.lng);
-  const report: CitizenReport = { ...input, id: randomUUID(), gu, createdAt: new Date().toISOString() };
+  const report: CitizenReport = { ...input, id, gu, createdAt: new Date().toISOString() };
   const sql = getSql();
   if (!sql) return report;
   await sql`
@@ -151,4 +152,18 @@ export async function upsertHealth(health: ApiHealth[]) {
       on conflict (provider) do update set status=excluded.status, last_success_at=excluded.last_success_at, failure_count_1h=excluded.failure_count_1h, message=excluded.message, updated_at=now()
     `;
   }
+}
+
+
+export async function insertExternalSnapshots(snapshots: Array<{ provider: string; endpoint: string; fetchedAt: string; validAt?: string; payload: JSONValue }>) {
+  const sql = getSql();
+  if (!sql) return { stored: 0, fallback: true };
+  for (const snapshot of snapshots) {
+    const payload = snapshot.payload;
+    await sql`
+      insert into external_snapshots (provider, endpoint, fetched_at, valid_at, payload)
+      values (${snapshot.provider}, ${snapshot.endpoint}, ${snapshot.fetchedAt}, ${snapshot.validAt ?? null}, ${sql.json(payload)})
+    `;
+  }
+  return { stored: snapshots.length, fallback: false };
 }

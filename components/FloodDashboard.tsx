@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { CitizenReport, PumpStation, RiverGauge, RiskCell, Shelter } from '@/lib/types';
+import { Map, MapMarker, Polygon, Polyline, Rectangle, useKakaoLoader } from 'react-kakao-maps-sdk';
+import type { CitizenReport, FloodPolygon, PumpStation, RiverGauge, RiskCell, RoadIncident, Shelter } from '@/lib/types';
 import { ACTION_COPY } from '@/packages/risk/scoring';
 import { haversineMeters, SEOUL_CENTER } from '@/lib/geo';
 import { LevelBadge } from './LevelBadge';
@@ -12,16 +13,77 @@ type Props = {
   pumps: PumpStation[];
   gauges: RiverGauge[];
   reports: CitizenReport[];
+  floodPolygons: FloodPolygon[];
+  roadIncidents: RoadIncident[];
+};
+
+type RouteResult = {
+  warning?: string | null;
+  distanceMeters?: number;
+  durationMinutes?: number;
+  polyline?: Array<{ lat: number; lng: number }>;
+  alternative?: { label: string; polyline: Array<{ lat: number; lng: number }> } | null;
 };
 
 const layerNames = ['위험 셀', '침수예상도', '대피소', '빗물펌프장', '도로 통제', '하천 수위계'] as const;
 const levelColor = { SAFE: 'rgba(242,244,246,.35)', LOW: 'rgba(255,195,66,.55)', MEDIUM: 'rgba(254,152,0,.60)', HIGH: 'rgba(240,68,82,.68)' };
+const levelStroke = { SAFE: '#e5e8eb', LOW: '#ffc342', MEDIUM: '#fe9800', HIGH: '#f04452' };
 
-export function FloodDashboard({ cells, shelters, pumps, gauges, reports }: Props) {
+function KakaoRiskMap({ cells, shelters, pumps, gauges, floodPolygons, roadIncidents, layers, currentCell, nearestShelter, route }: {
+  cells: RiskCell[];
+  shelters: Shelter[];
+  pumps: PumpStation[];
+  gauges: RiverGauge[];
+  floodPolygons: FloodPolygon[];
+  roadIncidents: RoadIncident[];
+  layers: Record<string, boolean>;
+  currentCell: RiskCell;
+  nearestShelter?: { s: Shelter; d: number };
+  route: RouteResult | null;
+}) {
+  const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY;
+  const [loading, error] = useKakaoLoader({ appkey: kakaoKey ?? 'missing-kakao-key', libraries: ['services'] });
+  if (!kakaoKey || loading || error) return <FallbackRiskMap cells={cells} layers={layers} currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} />;
+  return <div className="map" role="img" aria-label="Kakao Map 기반 서울 위험 셀 지도">
+    <Map center={SEOUL_CENTER} level={9} style={{ width: '100%', height: '100%' }}>
+      {layers['침수예상도'] && floodPolygons.map((poly) => <Polygon key={poly.id} path={poly.coordinates} fillColor="#3182f6" fillOpacity={0.12} strokeColor="#3182f6" strokeOpacity={0.36} strokeWeight={2} />)}
+      {layers['위험 셀'] && cells.slice(0, 600).map((cell) => <Rectangle key={cell.cellId} bounds={{ sw: { lat: cell.bbox[1], lng: cell.bbox[0] }, ne: { lat: cell.bbox[3], lng: cell.bbox[2] } }} fillColor={levelStroke[cell.level]} fillOpacity={cell.level === 'SAFE' ? 0.08 : 0.42} strokeColor={levelStroke[cell.level]} strokeOpacity={0.7} strokeWeight={1} />)}
+      {layers['대피소'] && shelters.map((s) => <MapMarker key={s.id} position={{ lat: s.lat, lng: s.lng }} title={s.name} />)}
+      {layers['빗물펌프장'] && pumps.map((p) => <MapMarker key={p.id} position={{ lat: p.lat, lng: p.lng }} title={p.name} />)}
+      {layers['하천 수위계'] && gauges.map((g) => <MapMarker key={g.id} position={{ lat: g.lat, lng: g.lng }} title={`${g.name} ${Math.round(g.ratio * 100)}%`} />)}
+      {layers['도로 통제'] && roadIncidents.map((r) => <MapMarker key={r.id} position={{ lat: r.lat, lng: r.lng }} title={r.title} />)}
+      {route?.polyline && <Polyline path={route.polyline} strokeColor="#191f28" strokeOpacity={0.82} strokeWeight={4} />}
+      {route?.alternative?.polyline && <Polyline path={route.alternative.polyline} strokeColor="#ffffff" strokeOpacity={0.95} strokeWeight={4} />}
+    </Map>
+    <MapOverlay currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} layers={layers} kakao />
+  </div>;
+}
+
+function FallbackRiskMap({ cells, layers, currentCell, nearestShelter, pumps, gauges }: Pick<Props, 'cells' | 'pumps' | 'gauges'> & { layers: Record<string, boolean>; currentCell: RiskCell; nearestShelter?: { s: Shelter; d: number } }) {
+  return <div className="map" role="img" aria-label="서울 위험 셀 지도 fallback">
+    {layers['위험 셀'] && <div className="demo-map-grid">{cells.slice(0, 125).map((cell) => <div key={cell.cellId} className="demo-cell" title={`${cell.gu} ${cell.score}`} style={{ background: levelColor[cell.level] }} />)}</div>}
+    <MapOverlay currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} layers={layers} />
+  </div>;
+}
+
+function MapOverlay({ currentCell, nearestShelter, pumps, gauges, layers, kakao = false }: { currentCell: RiskCell; nearestShelter?: { s: Shelter; d: number }; pumps: PumpStation[]; gauges: RiverGauge[]; layers: Record<string, boolean>; kakao?: boolean }) {
+  return <div className="map-overlay stack">
+    <div className="row"><b>{currentCell.gu} 현재 위험</b><LevelBadge level={currentCell.level} /></div>
+    <p className="caption">점수 {currentCell.score.toFixed(3)} · 강수 60분 {currentCell.inputs.rain60m}mm · 하천비 {Math.round(currentCell.inputs.riverRatio * 100)}%</p>
+    <div className="grid2">
+      {layers['빗물펌프장'] && <div className="card"><b>{pumps[0]?.name}</b><p className="caption">배수 운영 감시 지점</p></div>}
+      {layers['대피소'] && <div className="card"><b>{nearestShelter?.s.name}</b><p className="caption">{nearestShelter?.d.toLocaleString()}m · 도보 경로 보기</p></div>}
+      {layers['하천 수위계'] && <div className="card"><b>{gauges[0]?.name}</b><p className="caption">위험 임계 대비 {Math.round((gauges[0]?.ratio ?? 0) * 100)}%</p></div>}
+    </div>
+    <p className="caption">{kakao ? 'Kakao Map 위에 위험 셀과 정적 레이어를 렌더링 중입니다.' : 'Kakao JS 키가 없거나 로딩 실패 시 CSS fallback 지도를 표시합니다.'}</p>
+  </div>;
+}
+
+export function FloodDashboard({ cells, shelters, pumps, gauges, reports, floodPolygons, roadIncidents }: Props) {
   const [layers, setLayers] = useState<Record<string, boolean>>(() => Object.fromEntries(layerNames.map((n) => [n, true])));
   const [location, setLocation] = useState(SEOUL_CENTER);
   const [reportStatus, setReportStatus] = useState<string>();
-  const [route, setRoute] = useState<{ warning?: string | null; distanceMeters?: number; durationMinutes?: number } | null>(null);
+  const [route, setRoute] = useState<RouteResult | null>(null);
   const currentCell = useMemo(() => cells.map((c) => ({ c, d: haversineMeters(location, c.center) })).sort((a, b) => a.d - b.d)[0]?.c ?? cells[0], [cells, location]);
   const nearestShelter = useMemo(() => shelters.map((s) => ({ s, d: haversineMeters(location, s) })).sort((a, b) => a.d - b.d)[0], [shelters, location]);
   const highCount = cells.filter((c) => c.level === 'HIGH').length;
@@ -37,9 +99,15 @@ export function FloodDashboard({ cells, shelters, pumps, gauges, reports }: Prop
   async function submitReport(formData: FormData) {
     setReportStatus('제보 전송 중...');
     const mobilityBlock = ['보행', '유모차', '휠체어', '차량'].filter((v) => formData.get(v));
-    const response = await fetch('/api/reports', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
-      lat: location.lat, lng: location.lng, depthStep: formData.get('depthStep'), mobilityBlock, memo: formData.get('memo') || undefined,
-    }) });
+    const payload = new FormData();
+    payload.set('lat', String(location.lat));
+    payload.set('lng', String(location.lng));
+    payload.set('depthStep', String(formData.get('depthStep')));
+    payload.set('mobilityBlock', mobilityBlock.join(','));
+    if (formData.get('memo')) payload.set('memo', String(formData.get('memo')));
+    const photo = formData.get('photo');
+    if (photo instanceof File && photo.size > 0) payload.set('photo', photo);
+    const response = await fetch('/api/reports', { method: 'POST', body: payload });
     const data = await response.json();
     setReportStatus(response.ok ? `제보가 접수됐습니다. (${data.report.gu})` : data.error ?? '제보 실패');
   }
@@ -65,19 +133,7 @@ export function FloodDashboard({ cells, shelters, pumps, gauges, reports }: Prop
     <section className="stack" id="map">
       <div className="row"><h2>위험 지도</h2><span className="caption">줌 14 미만은 자치구 집계</span></div>
       <div className="switches">{layerNames.map((name) => <button key={name} className={`chip ${layers[name] ? 'active' : ''}`} onClick={() => setLayers((v) => ({ ...v, [name]: !v[name] }))}>{name}</button>)}</div>
-      <div className="map" role="img" aria-label="서울 위험 셀 지도 데모">
-        {layers['위험 셀'] && <div className="demo-map-grid">{cells.slice(0, 125).map((cell) => <div key={cell.cellId} className="demo-cell" title={`${cell.gu} ${cell.score}`} style={{ background: levelColor[cell.level] }} />)}</div>}
-        <div className="map-overlay stack">
-          <div className="row"><b>{currentCell.gu} 현재 위험</b><LevelBadge level={currentCell.level} /></div>
-          <p className="caption">점수 {currentCell.score.toFixed(3)} · 강수 60분 {currentCell.inputs.rain60m}mm · 하천비 {Math.round(currentCell.inputs.riverRatio * 100)}%</p>
-          <div className="grid2">
-            {layers['빗물펌프장'] && <div className="card"><b>{pumps[0]?.name}</b><p className="caption">배수 운영 감시 지점</p></div>}
-            {layers['대피소'] && <div className="card"><b>{nearestShelter?.s.name}</b><p className="caption">{nearestShelter?.d.toLocaleString()}m · 도보 경로 보기</p></div>}
-            {layers['하천 수위계'] && <div className="card"><b>{gauges[0]?.name}</b><p className="caption">위험 임계 대비 {Math.round((gauges[0]?.ratio ?? 0) * 100)}%</p></div>}
-          </div>
-          <p className="caption">Kakao JS 키가 등록된 배포 환경에서는 Kakao Map 위에 동일 레이어를 올릴 수 있도록 API 응답을 분리했습니다.</p>
-        </div>
-      </div>
+      <KakaoRiskMap cells={cells} shelters={shelters} pumps={pumps} gauges={gauges} floodPolygons={floodPolygons} roadIncidents={roadIncidents} layers={layers} currentCell={currentCell} nearestShelter={nearestShelter} route={route} />
     </section>
 
     <section className="card stack" id="route">
@@ -96,11 +152,12 @@ export function FloodDashboard({ cells, shelters, pumps, gauges, reports }: Prop
       <form action={submitReport} className="stack">
         <select className="select" name="depthStep" defaultValue="ankle"><option value="ankle">발목</option><option value="knee">무릎</option><option value="thigh">허벅지</option><option value="above">그 이상</option></select>
         <div className="grid2">{['보행', '유모차', '휠체어', '차량'].map((v) => <label key={v} className="caption"><input type="checkbox" name={v} /> {v} 통행불가</label>)}</div>
+        <input className="input" type="file" name="photo" accept="image/*" />
         <textarea className="textarea" name="memo" maxLength={180} placeholder="짧은 메모" />
         <button className="button" type="submit">현재 위치로 제보</button>
       </form>
       {reportStatus && <p className="caption">{reportStatus}</p>}
-      <div className="stack">{reports.slice(0, 3).map((r) => <div className="row" key={r.id}><span>{r.gu} · {r.memo}</span><span className="caption">{r.depthStep}</span></div>)}</div>
+      <div className="stack">{reports.slice(0, 3).map((r) => <div className="row" key={r.id}><span>{r.gu} · {r.memo}</span><span className="caption">{r.depthStep}{r.photoUrl ? ' · 사진' : ''}</span></div>)}</div>
     </section>
   </>;
 }
