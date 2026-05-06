@@ -65,6 +65,8 @@ TOPIS 키가 없으면 `road=0` fallback으로 동작하며 점수 영향은 최
 | `IP_SALT` | 제보 rate limit IP hash | 필수 |
 | `INGEST_FETCH_TIMEOUT_MS` | 외부 API timeout, 기본 8000 | 선택 |
 
+> 주의: `NODE_ENV`는 Vercel/Next.js가 자동 설정하므로 Vercel Environment Variables에 등록하지 마세요. `NODE_ENV=development`가 배포 환경에 들어가면 `next build`의 `/404` prerender에서 `<Html> should not be imported outside of pages/_document` 오류가 발생할 수 있습니다. 이 저장소의 `build` script는 방어적으로 `NODE_ENV=production`을 강제합니다.
+
 ## 로컬 실행
 
 ```bash
