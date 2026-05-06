@@ -8,7 +8,7 @@ export const env = {
   seoulKey: process.env.SEOUL_KEY,
   topisKey: process.env.TOPIS_KEY,
   kakaoRestKey: process.env.KAKAO_REST_KEY,
-  kakaoJsKey: process.env.NEXT_PUBLIC_KAKAO_JS_KEY,
+  kakaoJsKey: process.env.NEXT_PUBLIC_KAKAO_JS_KEY ?? process.env.KAKAO_JS_KEY,
   kakaoMobilityKey: process.env.KAKAO_MOBILITY_KEY,
   adminPassword: process.env.ADMIN_PASSWORD,
   sessionSecret: process.env.SESSION_SECRET,

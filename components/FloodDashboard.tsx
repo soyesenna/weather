@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Map, MapMarker, Polygon, Polyline, Rectangle, useKakaoLoader } from 'react-kakao-maps-sdk';
 import type { CitizenReport, FloodPolygon, PumpStation, RiverGauge, RiskCell, RoadIncident, Shelter } from '@/lib/types';
 import { ACTION_COPY } from '@/packages/risk/scoring';
@@ -25,11 +25,7 @@ type RouteResult = {
   alternative?: { label: string; polyline: Array<{ lat: number; lng: number }> } | null;
 };
 
-const layerNames = ['위험 셀', '침수예상도', '대피소', '빗물펌프장', '도로 통제', '하천 수위계'] as const;
-const levelColor = { SAFE: 'rgba(242,244,246,.35)', LOW: 'rgba(255,195,66,.55)', MEDIUM: 'rgba(254,152,0,.60)', HIGH: 'rgba(240,68,82,.68)' };
-const levelStroke = { SAFE: '#e5e8eb', LOW: '#ffc342', MEDIUM: '#fe9800', HIGH: '#f04452' };
-
-function KakaoRiskMap({ cells, shelters, pumps, gauges, floodPolygons, roadIncidents, layers, currentCell, nearestShelter, route }: {
+type MapRenderProps = {
   cells: RiskCell[];
   shelters: Shelter[];
   pumps: PumpStation[];
@@ -40,10 +36,78 @@ function KakaoRiskMap({ cells, shelters, pumps, gauges, floodPolygons, roadIncid
   currentCell: RiskCell;
   nearestShelter?: { s: Shelter; d: number };
   route: RouteResult | null;
-}) {
-  const kakaoKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY;
-  const [loading, error] = useKakaoLoader({ appkey: kakaoKey ?? 'missing-kakao-key', libraries: ['services'] });
-  if (!kakaoKey || loading || error) return <FallbackRiskMap cells={cells} layers={layers} currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} />;
+};
+
+type PublicConfig = {
+  kakaoJsKey: string;
+  hasKakaoJsKey: boolean;
+  deploymentOrigin: string | null;
+};
+
+const layerNames = ['위험 셀', '침수예상도', '대피소', '빗물펌프장', '도로 통제', '하천 수위계'] as const;
+const levelColor = { SAFE: 'rgba(242,244,246,.35)', LOW: 'rgba(255,195,66,.55)', MEDIUM: 'rgba(254,152,0,.60)', HIGH: 'rgba(240,68,82,.68)' };
+const levelStroke = { SAFE: '#e5e8eb', LOW: '#ffc342', MEDIUM: '#fe9800', HIGH: '#f04452' };
+const buildTimeKakaoKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY ?? '';
+
+function KakaoRiskMap(props: MapRenderProps) {
+  const [publicConfig, setPublicConfig] = useState<PublicConfig>(() => ({
+    kakaoJsKey: buildTimeKakaoKey,
+    hasKakaoJsKey: Boolean(buildTimeKakaoKey),
+    deploymentOrigin: null,
+  }));
+  const [configStatus, setConfigStatus] = useState<'loading' | 'ready' | 'error'>(() => (buildTimeKakaoKey ? 'ready' : 'loading'));
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (buildTimeKakaoKey) return;
+    let ignore = false;
+
+    async function loadPublicConfig() {
+      try {
+        setConfigStatus('loading');
+        const response = await fetch('/api/config/public', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`public config ${response.status}`);
+        const data = (await response.json()) as PublicConfig;
+        if (ignore) return;
+        setPublicConfig({
+          kakaoJsKey: data.kakaoJsKey ?? '',
+          hasKakaoJsKey: Boolean(data.hasKakaoJsKey && data.kakaoJsKey),
+          deploymentOrigin: data.deploymentOrigin ?? null,
+        });
+        setConfigStatus('ready');
+      } catch (error) {
+        if (ignore) return;
+        setConfigError(error instanceof Error ? error.message : 'public config 로드 실패');
+        setConfigStatus('error');
+      }
+    }
+
+    void loadPublicConfig();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const kakaoKey = publicConfig.kakaoJsKey.trim();
+  if (configStatus === 'loading') {
+    return <FallbackRiskMap {...props} status="Kakao 지도 설정을 확인하는 중입니다." />;
+  }
+  if (!kakaoKey) {
+    return <FallbackRiskMap {...props} status={configError ? `Kakao 지도 설정 로드 실패: ${configError}` : 'Kakao JavaScript 키가 배포 환경에 없어 CSS 지도를 표시합니다.'} />;
+  }
+
+  return <KakaoMapCanvas {...props} kakaoKey={kakaoKey} deploymentOrigin={publicConfig.deploymentOrigin} />;
+}
+
+function KakaoMapCanvas({ kakaoKey, deploymentOrigin, cells, shelters, pumps, gauges, floodPolygons, roadIncidents, layers, currentCell, nearestShelter, route }: MapRenderProps & { kakaoKey: string; deploymentOrigin: string | null }) {
+  const [loading, error] = useKakaoLoader({ appkey: kakaoKey, libraries: ['services'] });
+
+  if (loading) return <FallbackRiskMap cells={cells} layers={layers} currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} status="Kakao 지도 SDK를 불러오는 중입니다." />;
+  if (error) {
+    const hostHint = deploymentOrigin ? ` 현재 도메인(${deploymentOrigin})이 Kakao Developers Web 플랫폼에 등록됐는지 확인하세요.` : ' Kakao Developers Web 플랫폼 도메인 등록을 확인하세요.';
+    return <FallbackRiskMap cells={cells} layers={layers} currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} status={`Kakao 지도 SDK 로드 실패.${hostHint}`} />;
+  }
+
   return <div className="map" role="img" aria-label="Kakao Map 기반 서울 위험 셀 지도">
     <Map center={SEOUL_CENTER} level={9} style={{ width: '100%', height: '100%' }}>
       {layers['침수예상도'] && floodPolygons.map((poly) => <Polygon key={poly.id} path={poly.coordinates} fillColor="#3182f6" fillOpacity={0.12} strokeColor="#3182f6" strokeOpacity={0.36} strokeWeight={2} />)}
@@ -55,18 +119,18 @@ function KakaoRiskMap({ cells, shelters, pumps, gauges, floodPolygons, roadIncid
       {route?.polyline && <Polyline path={route.polyline} strokeColor="#191f28" strokeOpacity={0.82} strokeWeight={4} />}
       {route?.alternative?.polyline && <Polyline path={route.alternative.polyline} strokeColor="#ffffff" strokeOpacity={0.95} strokeWeight={4} />}
     </Map>
-    <MapOverlay currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} layers={layers} kakao />
+    <MapOverlay currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} layers={layers} status="Kakao Map 위에 위험 셀과 정적 레이어를 렌더링 중입니다." />
   </div>;
 }
 
-function FallbackRiskMap({ cells, layers, currentCell, nearestShelter, pumps, gauges }: Pick<Props, 'cells' | 'pumps' | 'gauges'> & { layers: Record<string, boolean>; currentCell: RiskCell; nearestShelter?: { s: Shelter; d: number } }) {
+function FallbackRiskMap({ cells, layers, currentCell, nearestShelter, pumps, gauges, status }: Pick<Props, 'cells' | 'pumps' | 'gauges'> & { layers: Record<string, boolean>; currentCell: RiskCell; nearestShelter?: { s: Shelter; d: number }; status: string }) {
   return <div className="map" role="img" aria-label="서울 위험 셀 지도 fallback">
     {layers['위험 셀'] && <div className="demo-map-grid">{cells.slice(0, 125).map((cell) => <div key={cell.cellId} className="demo-cell" title={`${cell.gu} ${cell.score}`} style={{ background: levelColor[cell.level] }} />)}</div>}
-    <MapOverlay currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} layers={layers} />
+    <MapOverlay currentCell={currentCell} nearestShelter={nearestShelter} pumps={pumps} gauges={gauges} layers={layers} status={status} />
   </div>;
 }
 
-function MapOverlay({ currentCell, nearestShelter, pumps, gauges, layers, kakao = false }: { currentCell: RiskCell; nearestShelter?: { s: Shelter; d: number }; pumps: PumpStation[]; gauges: RiverGauge[]; layers: Record<string, boolean>; kakao?: boolean }) {
+function MapOverlay({ currentCell, nearestShelter, pumps, gauges, layers, status }: { currentCell: RiskCell; nearestShelter?: { s: Shelter; d: number }; pumps: PumpStation[]; gauges: RiverGauge[]; layers: Record<string, boolean>; status: string }) {
   return <div className="map-overlay stack">
     <div className="row"><b>{currentCell.gu} 현재 위험</b><LevelBadge level={currentCell.level} /></div>
     <p className="caption">점수 {currentCell.score.toFixed(3)} · 강수 60분 {currentCell.inputs.rain60m}mm · 하천비 {Math.round(currentCell.inputs.riverRatio * 100)}%</p>
@@ -75,7 +139,7 @@ function MapOverlay({ currentCell, nearestShelter, pumps, gauges, layers, kakao 
       {layers['대피소'] && <div className="card"><b>{nearestShelter?.s.name}</b><p className="caption">{nearestShelter?.d.toLocaleString()}m · 도보 경로 보기</p></div>}
       {layers['하천 수위계'] && <div className="card"><b>{gauges[0]?.name}</b><p className="caption">위험 임계 대비 {Math.round((gauges[0]?.ratio ?? 0) * 100)}%</p></div>}
     </div>
-    <p className="caption">{kakao ? 'Kakao Map 위에 위험 셀과 정적 레이어를 렌더링 중입니다.' : 'Kakao JS 키가 없거나 로딩 실패 시 CSS fallback 지도를 표시합니다.'}</p>
+    <p className="caption">{status}</p>
   </div>;
 }
 

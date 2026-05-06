@@ -57,7 +57,7 @@ TOPIS 키가 없으면 `road=0` fallback으로 동작하며 점수 영향은 최
 | `SEOUL_KEY` | 하천/하수/정적 데이터 API | 실데이터 수집 필수 |
 | `TOPIS_KEY` | 도로 소통/돌발 | 선택, 미설정 시 fallback |
 | `KAKAO_REST_KEY` | 주소→좌표 변환 | 안전경로 고도화 필수 |
-| `NEXT_PUBLIC_KAKAO_JS_KEY` | Kakao Map JS | 지도 고도화 필수 |
+| `NEXT_PUBLIC_KAKAO_JS_KEY` 또는 `KAKAO_JS_KEY` | Kakao Map JavaScript public key. 전자는 build-time public env, 후자는 `/api/config/public` 런타임 공급 alias | 지도 고도화 필수 |
 | `KAKAO_MOBILITY_KEY` | Mobility 길찾기 | 선택, 미설정 시 haversine fallback |
 | `ADMIN_PASSWORD` | `/admin` 인증 | 필수 |
 | `SESSION_SECRET` | admin session 서명 | 필수 |
@@ -101,7 +101,7 @@ pnpm build
 ## 배포
 
 1. Vercel 프로젝트 생성 후 GitHub repository 연결
-2. Vercel env에 `.env.local` 값을 등록 (`NEXT_PUBLIC_KAKAO_JS_KEY`만 클라이언트 노출)
+2. Vercel env에 `.env.local` 값을 등록 (`NEXT_PUBLIC_KAKAO_JS_KEY` 권장, 누락 시 `KAKAO_JS_KEY`도 `/api/config/public`로 런타임 공급 가능)
 3. Supabase SQL Editor 또는 `pnpm db:schema`로 `db/schema.sql` 적용
 4. GitHub Actions Secrets 등록
    - `DEPLOY_URL=https://<vercel-domain>`
@@ -114,7 +114,7 @@ pnpm build
 - KMA: 공공데이터포털 → `기상청 단기예보 조회서비스` 활용신청 → 일반 인증키(Decoding)를 `KMA_KEY`에 입력
 - 서울시: 서울 열린데이터광장 → 인증키 신청 → `SEOUL_KEY` 입력
 - TOPIS: 실시간 도로 소통/돌발 정보 신청 → `TOPIS_KEY` 입력, 없으면 fallback 허용
-- Kakao: Kakao Developers → 앱 생성 → REST API 키/JavaScript 키 입력 → Web domain whitelist 등록
+- Kakao: Kakao Developers → 앱 생성 → REST API 키/JavaScript 키 입력 → Web domain whitelist 등록. JavaScript 키는 `NEXT_PUBLIC_KAKAO_JS_KEY`로 넣는 것을 권장하고, Vercel build-time public env 누락을 피하려면 동일 값을 `KAKAO_JS_KEY` alias로도 넣을 수 있습니다.
 - Supabase: Project → Settings → Database/API/Storage 값 입력, `postgis` extension 활성화
 
 ## Security / Secret 회전
@@ -135,7 +135,7 @@ openssl rand -hex 32  # IP_SALT
 - Vercel Logs: `/api/ingest/all`, `/api/route`, `/api/reports` 함수 로그 확인
 - GitHub Actions: `ingest` workflow의 curl status와 secret 누락 확인
 - Supabase Logs: Postgres connection pool, Storage private bucket 권한 확인
-- Kakao 지도 미표출: `NEXT_PUBLIC_KAKAO_JS_KEY`와 Web platform domain whitelist 확인
+- Kakao 지도 미표출: `/api/config/public`의 `hasKakaoJsKey=true` 여부와 Kakao Developers Web platform domain whitelist 확인
 
 ## 시연 GIF/영상
 

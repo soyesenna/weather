@@ -22,7 +22,7 @@ Generated: 2026-05-06 KST
 | 위험도 룰베이스 0.0~1.0 + SAFE/LOW/MEDIUM/HIGH | `packages/risk/scoring.ts`, `packages/risk/__tests__/scoring.test.ts` | Done |
 | 약 250m 위험 셀 current upsert | `risk_score_current` schema, `packages/risk/demo-data.ts`, `scripts/replay-seed.ts` | Demo-seeded; production grid import is a follow-up data operation |
 | `/api/risk/cells` BBox + auto aggregated fallback | `app/api/risk/cells/route.ts`; smoke saw `X-Auto-Aggregated: true` | Done |
-| Kakao Map 기반 지도 | `components/FloodDashboard.tsx` uses `react-kakao-maps-sdk`; CSS fallback when key/domain unavailable | Done locally; deployment domain render pending |
+| Kakao Map 기반 지도 | `components/FloodDashboard.tsx`, `app/api/config/public/route.ts`; build-time `NEXT_PUBLIC_KAKAO_JS_KEY`와 runtime `KAKAO_JS_KEY` alias 지원, SDK/domain 실패 진단 표시 | Done locally; deployment domain render pending |
 | 레이어 토글: 위험/침수/대피소/펌프장/도로/수위계 | `components/FloodDashboard.tsx`, `app/api/static/layers/route.ts`; smoke counts verified | Done |
 | 위치 권한 행동 카드 | `components/FloodDashboard.tsx`, `ACTION_COPY` in `packages/risk/scoring.ts` | Done |
 | 가까운 대피소 거리/도보 경로 CTA | `components/FloodDashboard.tsx` | Done |
@@ -66,8 +66,9 @@ Expected checks:
 2. `/api/health` returns JSON with `ok=true`.
 3. `/api/risk/cells?bbox=126.7,37.4,127.2,37.7&zoom=13` returns `X-Auto-Aggregated: true`.
 4. `/api/static/layers` returns non-empty static layer arrays.
-5. `/api/admin/login` rejects a wrong password with `401`.
-6. Kakao Developers Web domain whitelist should include the deployed domain before visual acceptance.
+5. `/api/config/public` returns `hasKakaoJsKey=true` for the Kakao JavaScript key.
+6. `/api/admin/login` rejects a wrong password with `401`.
+7. Kakao Developers Web domain whitelist should include the deployed domain before visual acceptance.
 
 ## Verdict
 
