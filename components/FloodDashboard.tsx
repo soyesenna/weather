@@ -45,6 +45,7 @@ type PublicConfig = {
 };
 
 const layerNames = ['위험 셀', '침수예상도', '대피소', '빗물펌프장', '도로 통제', '하천 수위계'] as const;
+const defaultActiveLayers = new Set<(typeof layerNames)[number]>(['침수예상도', '대피소']);
 const levelColor = { SAFE: 'rgba(242,244,246,.35)', LOW: 'rgba(255,195,66,.55)', MEDIUM: 'rgba(254,152,0,.60)', HIGH: 'rgba(240,68,82,.68)' };
 const levelStroke = { SAFE: '#e5e8eb', LOW: '#ffc342', MEDIUM: '#fe9800', HIGH: '#f04452' };
 const buildTimeKakaoKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY ?? '';
@@ -144,7 +145,7 @@ function MapOverlay({ currentCell, nearestShelter, pumps, gauges, layers, status
 }
 
 export function FloodDashboard({ cells, shelters, pumps, gauges, reports, floodPolygons, roadIncidents }: Props) {
-  const [layers, setLayers] = useState<Record<string, boolean>>(() => Object.fromEntries(layerNames.map((n) => [n, true])));
+  const [layers, setLayers] = useState<Record<string, boolean>>(() => Object.fromEntries(layerNames.map((n) => [n, defaultActiveLayers.has(n)])));
   const [location, setLocation] = useState(SEOUL_CENTER);
   const [reportStatus, setReportStatus] = useState<string>();
   const [route, setRoute] = useState<RouteResult | null>(null);
