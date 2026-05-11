@@ -1,0 +1,16 @@
+name: ingest
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Vercel ingest endpoint
+        run: |
+          curl -fsS -X POST "$DEPLOY_URL/api/ingest/all" \
+            -H "X-Ingest-Token: $INGEST_TOKEN"
+        env:
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
